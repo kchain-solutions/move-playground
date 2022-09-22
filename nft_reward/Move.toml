@@ -1,0 +1,12 @@
+[package]
+name="NFT sample"
+version="0.5.2"
+
+[addresses]
+nft_app="_"
+
+[dependencies.AptosFramework]
+git = 'https://github.com/aptos-labs/aptos-core.git'
+rev = 'devnet'
+subdir = 'aptos-move/framework/aptos-framework'
+

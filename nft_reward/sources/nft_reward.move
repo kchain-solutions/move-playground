@@ -23,11 +23,12 @@ module nft_app::nft_reward{
         reward: Reward
     }
 
-    public entry fun init_resources(account: signer) {  
+    public entry fun init_resources(account: &signer) {  
         let init_reward = Reward {value: 0};
-        let nft_data = NftData {timestamp: 0, old_timestamp:0, name:utf8(b"Reward NFT"), url:utf8(b"aptos.com")};
-        move_to(&account, RewardBalance{ reward: init_reward});
-        move_to(&account, Nft{ nft_data: nft_data});
+        let current_timestamp = timestamp::now_seconds();
+        let nft_data = NftData {timestamp: current_timestamp, old_timestamp:0, name:utf8(b"Reward NFT"), url:utf8(b"aptos.com")};
+        move_to(account, RewardBalance{ reward: init_reward});
+        move_to(account, Nft{ nft_data: nft_data});
     }
     spec init_resources{
         let addr = signer::address_of(account);
@@ -35,21 +36,11 @@ module nft_app::nft_reward{
         aborts_if exists<Nft>(addr);
     }
 
-    public entry fun init_timestamp(account: signer) acquires Nft{
-        let account_addr = signer::address_of(&account);
-        let current_timestamp = timestamp::now_seconds();
-
-        let nft = borrow_global_mut<Nft>(account_addr);
-        nft.nft_data.timestamp = current_timestamp;
-    }
-    spec init_timestamp {
-        aborts_if !exists<Nft>(signer::address_of(&account));
-    }
 
     //This method convert the Nft in Reward point amount
-    public entry fun update_reward(account: signer) acquires Nft, RewardBalance{
+    public entry fun update_reward(account: &signer) acquires Nft, RewardBalance{
 
-        let account_addr = signer::address_of(&account);
+        let account_addr = signer::address_of(account);
 
         if(exists<Nft>(account_addr) && exists<RewardBalance>(account_addr)){
 
@@ -82,8 +73,8 @@ module nft_app::nft_reward{
 
     
     // Safest approach would be to implement aptos_framework::coin
-    public entry fun transfer(account: signer, to: address, amount:u64) acquires RewardBalance {
-        let account_addr = signer::address_of(&account);
+    public entry fun transfer(account: &signer, to: address, amount:u64) acquires RewardBalance {
+        let account_addr = signer::address_of(account);
         let deposit_amount = withdraw(account_addr, amount);
         deposit(to, deposit_amount);
 
@@ -116,23 +107,45 @@ module nft_app::nft_reward{
 
 // ***TESTING***
 
-    #[test (account = @0x01234)]
-    public fun init_resources_test(account:signer) acquires Nft{
-        let addr = signer::address_of(&account);
-        
+    #[test (account = @0x01234, aptos_framework = @aptos_framework)]
+    public fun init_resources_test(account:&signer, aptos_framework:&signer) acquires Nft{
+        let addr = signer::address_of(account);
+        timestamp::set_time_has_started_for_testing(aptos_framework);
         init_resources(account);
         let nft = borrow_global<Nft>(addr);
         
         assert!(nft.nft_data.url==utf8(b"aptos.com"), 0);
+        assert!(nft.nft_data.name==utf8(b"Reward NFT"), 0);
     }
 
-    #[test(account = @0x01234)]
-    public fun init_timestamp_test(account: signer) acquires Nft{
-        let addr = signer::address_of(&account);
-        init_timestamp(account);
-        let nft = borrow_global<Nft>(addr);
-        assert!(nft.nft_data.timestamp > 0, 0);
+    #[test (account = @0x01234, aptos_framework = @aptos_framework)]
+    public fun update_reward_test(account:&signer, aptos_framework:&signer)acquires RewardBalance, Nft{
+        let addr = signer::address_of(account);
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+        init_resources(account);
+        timestamp::fast_forward_seconds(250);
+        update_reward(account);
+        let reward_balance = borrow_global_mut<RewardBalance>(addr);
+        assert!(reward_balance.reward.value > 249, 1);
     }
+
+     #[test (account = @0x01234, user=@0x456, aptos_framework = @aptos_framework)]
+     public fun transfer_test(account:&signer, 
+                    user:&signer, 
+                    aptos_framework:&signer) 
+        acquires RewardBalance, Nft{
+        let user_addr = signer::address_of(user);
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+        init_resources(account);
+        init_resources(user);
+        timestamp::fast_forward_seconds(250);
+        update_reward(account);
+        let amount_transfered: u64 = 10;
+        transfer(account, user_addr, amount_transfered);
+        timestamp::fast_forward_seconds(5);
+        let reward_balance_usr = borrow_global_mut<RewardBalance>(user_addr);
+        assert!(reward_balance_usr.reward.value == amount_transfered, 1);
+     }
 }
 
 
